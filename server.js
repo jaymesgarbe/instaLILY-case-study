@@ -60,64 +60,38 @@ function calculateLeadScore(contractor) {
 // ─── Perplexity GAF ingestion ─────────────────────────────────────────────────
 
 async function ingestContractorsFromPerplexity(zip = "10013", distance = 25) {
-  console.log(`[Ingest] Querying Perplexity for GAF contractors near ${zip}...`);
+  console.log(`[Ingest] Querying Perplexity for GAF contractors near ${zip} (2 batches)...`);
 
-  const prompt = `Find real GAF-certified roofing contractors within ${distance} miles of zip code ${zip} (lower Manhattan, NYC).
+  const schema = '{"name":"string","certLevel":"master_elite|certified_plus|certified","address":"string","city":"string","state":"2-letter","zip":"string","phone":"string|null","website":"string|null","distance":0,"yearsInBusiness":0,"reviewCount":0,"rating":0,"specialties":["string"],"employees":"string","recentProjects":0}';
 
-Use the GAF contractor directory at gaf.com/en-us/roofing-contractors/residential and other public sources.
+  const makePrompt = (batch) => `Find real GAF-certified roofing contractors within ${distance} miles of zip ${zip} (NYC metro).
+Use gaf.com/en-us/roofing-contractors/residential and public sources.
+Return ONLY a valid JSON array of 8 contractors. No markdown, no preamble, no explanation.
+Each object must match: ${schema}
+Batch ${batch} of 2 — if batch 2, return different contractors than batch 1.
+If real data is unavailable, estimate realistically.`;
 
-Return a JSON array of up to 15 contractors. Each object must follow this exact schema:
-{
-  "name": "Company name",
-  "certLevel": "master_elite" | "certified_plus" | "certified",
-  "address": "Street address",
-  "city": "City",
-  "state": "2-letter state",
-  "zip": "ZIP code",
-  "phone": "Phone number or null",
-  "website": "Website URL or null",
-  "distance": <miles from ${zip} as a number>,
-  "yearsInBusiness": <estimated years as integer>,
-  "reviewCount": <approximate Google/Yelp review count as integer>,
-  "rating": <average rating 1.0-5.0 as number>,
-  "specialties": ["array", "of", "specialties"],
-  "employees": "estimated range e.g. 10-25",
-  "recentProjects": <estimated recent project count as integer>
-}
+  const [r1, r2] = await Promise.allSettled([
+    callPerplexityRaw(makePrompt(1)),
+    callPerplexityRaw(makePrompt(2)),
+  ]);
 
-Return ONLY a valid JSON array. No markdown, no explanation, no preamble.
-If you cannot find enough real contractors, fill remaining slots with realistic estimates based on known GAF contractor patterns in the NYC metro area.`;
-
-  const res = await fetch("https://api.perplexity.ai/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "sonar",
-      messages: [
-        { role: "system", content: "You are a data extraction assistant. Return only valid JSON arrays with no extra text." },
-        { role: "user", content: prompt },
-      ],
-      max_tokens: 3000,
-      temperature: 0.1,
-    }),
-  });
-
-  if (!res.ok) throw new Error(`Perplexity ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  const raw = data.choices[0].message.content.replace(/```json|```/g, "").trim();
-
-  let contractors;
-  try {
-    contractors = JSON.parse(raw);
-    if (!Array.isArray(contractors)) throw new Error("Response was not an array");
-  } catch (err) {
-    throw new Error(`Failed to parse Perplexity response: ${err.message}`);
+  const seenNames = new Set();
+  const contractors = [];
+  for (const result of [r1, r2]) {
+    if (result.status !== 'fulfilled') { console.warn('[Ingest] Batch failed:', result.reason?.message); continue; }
+    try {
+      const parsed = JSON.parse(result.value.replace(/```json|```/g, '').trim());
+      if (!Array.isArray(parsed)) continue;
+      for (const c of parsed) {
+        const key = (c.name || '').toLowerCase().trim();
+        if (key && !seenNames.has(key)) { seenNames.add(key); contractors.push(c); }
+      }
+    } catch(e) { console.warn('[Ingest] Parse failed:', e.message); }
   }
 
-  console.log(`[Ingest] Perplexity returned ${contractors.length} contractors`);
+  if (contractors.length === 0) throw new Error('No contractors returned from either batch');
+  console.log(`[Ingest] Perplexity returned ${contractors.length} contractors across 2 batches`);
 
   // Normalize, score, and assign stable IDs
   return contractors.map((c, i) => {
@@ -145,6 +119,28 @@ If you cannot find enough real contractors, fill remaining slots with realistic 
     normalized.leadScore = calculateLeadScore(normalized);
     return normalized;
   });
+}
+
+
+// ─── Perplexity raw call (used by ingestion) ─────────────────────────────────
+
+async function callPerplexityRaw(prompt) {
+  const res = await fetch('https://api.perplexity.ai/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'sonar',
+      messages: [
+        { role: 'system', content: 'You are a data extraction assistant. Return only valid JSON arrays. No markdown, no preamble, no explanation.' },
+        { role: 'user', content: prompt },
+      ],
+      max_tokens: 4000,
+      temperature: 0.1,
+    }),
+  });
+  if (!res.ok) throw new Error(`Perplexity ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  return data.choices[0].message.content;
 }
 
 // ─── Perplexity enrichment (per-contractor brief) ─────────────────────────────
