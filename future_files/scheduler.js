@@ -11,7 +11,7 @@
 require("dotenv").config({ path: "../.env" });
 const cron = require("node-cron");
 const { Pool } = require("pg");
-const { enrichContractor } = require("./enrichment");
+const { enrichContractor } = require("../enrichment");
 const { getCache, setCache } = require("../utils/cache");
 const logger = require("../utils/logger");
 
