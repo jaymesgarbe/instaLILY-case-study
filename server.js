@@ -313,23 +313,51 @@ app.post('/api/ingest/playwright', async (req, res) => {
       await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
       await page.waitForTimeout(3000);
 
-      // Scroll to load all lazy-loaded contractor cards
-      console.log('[Playwright] Scrolling to load all contractors...');
-      let prevHeight = 0;
-      let scrollAttempts = 0;
-      while (scrollAttempts < 20) {
-        const currHeight = await page.evaluate(() => {
-          window.scrollTo(0, document.body.scrollHeight);
-          return document.body.scrollHeight;
-        });
+      // Click 'Load More' and scroll until all contractors are loaded
+      console.log('[Playwright] Loading all contractors...');
+      let totalLoaded = 0;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        // Scroll to bottom first
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
         await page.waitForTimeout(1500);
-        if (currHeight === prevHeight) break;
-        prevHeight = currHeight;
-        scrollAttempts++;
-        console.log(`[Playwright] Scroll ${scrollAttempts} — page height: ${currHeight}px`);
+
+        // Try clicking any 'Load More' / 'Show More' / 'Next' button
+        const clicked = await page.evaluate(() => {
+          const btnSelectors = [
+            'button[class*="load-more"]', 'button[class*="LoadMore"]',
+            'button[class*="show-more"]', 'button[class*="ShowMore"]',
+            'a[class*="load-more"]', 'a[class*="show-more"]',
+            'button[class*="pagination"]', '[class*="load-more"]',
+            '[class*="loadMore"]', '[class*="showMore"]',
+          ];
+          for (const sel of btnSelectors) {
+            const btn = document.querySelector(sel);
+            if (btn && btn.offsetParent !== null) { btn.click(); return sel; }
+          }
+          // Also try any button whose text includes load/show/more
+          const allBtns = [...document.querySelectorAll('button, a')];
+          const moreBtn = allBtns.find(b => /load more|show more|view more|next/i.test(b.innerText) && b.offsetParent !== null);
+          if (moreBtn) { moreBtn.click(); return moreBtn.innerText.trim(); }
+          return null;
+        });
+
+        // Count current cards
+        const count = await page.evaluate(() => {
+          const selectors = ['[class*="contractor-card"]','[class*="ContractorCard"]','[class*="contractor-result"]','[class*="search-result"]','[class*="ResultCard"]','.contractor-listing','[class*="listing-card"]','[class*="contractor-item"]','[class*="ContractorItem"]'];
+          for (const sel of selectors) {
+            const cards = document.querySelectorAll(sel);
+            if (cards.length > 0) return cards.length;
+          }
+          return 0;
+        });
+
+        console.log(`[Playwright] Attempt ${attempt + 1}: ${count} cards visible, clicked: ${clicked || 'nothing'}`);
+
+        if (count === totalLoaded && !clicked) break; // nothing new loaded and no button found
+        totalLoaded = count;
+        if (clicked) await page.waitForTimeout(2000); // wait for new cards to render after click
       }
-      console.log(`[Playwright] Scrolling complete after ${scrollAttempts} passes`);
-      await page.waitForTimeout(1000);
+      console.log(`[Playwright] Loading complete — ${totalLoaded} cards found`);
 
       const raw = await page.evaluate(() => {
         const results = [];
