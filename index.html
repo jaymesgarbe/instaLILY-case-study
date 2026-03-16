@@ -19,6 +19,9 @@
     ul { padding-left: 16px; } li { line-height: 1.7; margin-bottom: 2px; }
     ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
     @keyframes pls { 0%,100% { opacity: 0.2; } 50% { opacity: 1; } }
+    .accordion-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; cursor: pointer; border-radius: 8px; background: #f9f9f7; border: 0.5px solid #e8e7df; user-select: none; transition: background 0.1s; }
+    .accordion-header:hover { background: #f1f0e8; }
+    .accordion-body { padding: 10px 14px 12px; border: 0.5px solid #e8e7df; border-top: none; border-radius: 0 0 8px 8px; background: #fff; }
   </style>
 </head>
 <body>
@@ -38,10 +41,9 @@ const STATUS_CFG = {
   qualified:{ label: "Qualified",    bg: "#EAF3DE", color: "#27500A" },
   proposal: { label: "Proposal Sent",bg: "#EEEDFE", color: "#3C3489" }
 };
-const STATUS_NEXT = { new: "contacted", contacted: "qualified", qualified: "proposal", proposal: "new" };
+const STATUS_NEXT       = { new: "contacted", contacted: "qualified", qualified: "proposal", proposal: "new" };
 const STATUS_NEXT_LABEL = { new: "Mark Contacted", contacted: "Mark Qualified", qualified: "Send Proposal", proposal: "Reset to New" };
 const STATUS_NEXT_COLOR = { new: "#185FA5", contacted: "#3B6D11", qualified: "#3C3489", proposal: "#888780" };
-
 const REP_SIGNAL = {
   positive:{ label: "Positive", bg: "#EAF3DE", color: "#27500A" },
   mixed:   { label: "Mixed",    bg: "#FAEEDA", color: "#633806" },
@@ -59,10 +61,7 @@ const sc = s => s >= 80 ? "#3B6D11" : s >= 60 ? "#854F0B" : "#993C1D";
 function Badge({ certLevel, presidentsClub }) {
   const c = CERT[certLevel] || CERT.certified;
   const label = presidentsClub ? "President's Club ★" : c.label;
-  const bg = presidentsClub ? "#FFF3CD" : c.bg;
-  const color = presidentsClub ? "#5C3A00" : c.color;
-  const border = presidentsClub ? "#F0A500" : c.border;
-  return React.createElement("span", { style: { fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 4, background: bg, color, border: `0.5px solid ${border}`, whiteSpace: "nowrap" } }, label);
+  return React.createElement("span", { style: { fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 4, background: presidentsClub ? "#FFF3CD" : c.bg, color: presidentsClub ? "#5C3A00" : c.color, border: "0.5px solid " + (presidentsClub ? "#F0A500" : c.border), whiteSpace: "nowrap" } }, label);
 }
 function StatusPill({ status }) {
   const c = STATUS_CFG[status] || STATUS_CFG.new;
@@ -77,7 +76,7 @@ function SourceTag({ source }) {
 function ScoreBar({ score }) {
   return React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
     React.createElement("div", { style: { flex: 1, height: 6, background: "#e8e7df", borderRadius: 3, overflow: "hidden" } },
-      React.createElement("div", { style: { width: `${score}%`, height: "100%", background: sc(score), borderRadius: 3 } })
+      React.createElement("div", { style: { width: score + "%", height: "100%", background: sc(score), borderRadius: 3 } })
     ),
     React.createElement("span", { style: { fontSize: 13, fontWeight: 500, color: sc(score), minWidth: 28 } }, score)
   );
@@ -92,6 +91,24 @@ function InfoRow({ label, value }) {
   );
 }
 
+function Accordion({ title, items, color }) {
+  const [open, setOpen] = useState(false);
+  return React.createElement("div", { style: { marginBottom: 8 } },
+    React.createElement("div", { className: "accordion-header", onClick: () => setOpen(o => !o) },
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+        React.createElement("span", { style: { fontSize: 12, fontWeight: 500, color: "#1a1a18" } }, title),
+        React.createElement("span", { style: { fontSize: 11, padding: "1px 7px", borderRadius: 10, background: "#e8e7df", color: "#888780" } }, items.length)
+      ),
+      React.createElement("span", { style: { fontSize: 14, color: "#888780", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s", display: "inline-block" } }, "▾")
+    ),
+    open && React.createElement("div", { className: "accordion-body" },
+      React.createElement("ul", { style: { paddingLeft: 16, margin: 0 } },
+        items.map((item, i) => React.createElement("li", { key: i, style: { fontSize: 12, lineHeight: 1.7, color: color || "#1a1a18", marginBottom: 2 } }, item))
+      )
+    )
+  );
+}
+
 function ScoreExplainer({ contractor }) {
   const certScore    = contractor.presidentsClub ? 50 : 40;
   const ratingScore  = Math.round(Math.max(0, ((contractor.rating || 4) - 3.0) / 2.0) * 20);
@@ -99,33 +116,48 @@ function ScoreExplainer({ contractor }) {
   const tenureScore  = Math.min(Math.round((contractor.yearsInBusiness || 1) / 2), 10);
   const activityScore= Math.min(Math.round((contractor.recentProjects || 0) * 1.5), 15);
   const rows = [
-    ["GAF Certification", contractor.presidentsClub ? "President's Club (+50)" : "Master Elite (+40)", certScore],
-    ["Rating", `${contractor.rating || "N/A"}/5.0`, ratingScore],
-    ["Review Count", `${contractor.reviewCount || 0} reviews`, reviewScore],
-    ["Years in Business", `${contractor.yearsInBusiness || 1} years`, tenureScore],
-    ["Recent Activity", `${contractor.recentProjects || 0} projects / 90d`, activityScore],
+    ["GAF Certification", contractor.presidentsClub ? "President's Club" : "Master Elite", certScore],
+    ["Rating",            (contractor.rating || "N/A") + " / 5.0",                         ratingScore],
+    ["Review Count",      (contractor.reviewCount || 0) + " reviews",                       reviewScore],
+    ["Years in Business", (contractor.yearsInBusiness || 1) + " years",                     tenureScore],
+    ["Recent Activity",   (contractor.recentProjects || 0) + " projects / 90d",             activityScore],
   ];
   return React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 12, padding: "14px 16px", marginBottom: 18 } },
-    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
+    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
       React.createElement(Label, null, "Lead Score Breakdown"),
       React.createElement("span", { style: { fontSize: 22, fontWeight: 500, color: sc(contractor.leadScore) } }, contractor.leadScore + "/100")
     ),
     React.createElement("div", { style: { fontSize: 11, color: "#888780", marginBottom: 10, lineHeight: 1.6 } },
-      "Score combines GAF certification tier, customer rating, review volume, years in business, and recent project activity. Range: 0–100. 80+ = hot lead."
+      "Combines GAF certification tier, customer rating, review volume, years in business, and recent project activity. 80+ = hot lead."
     ),
     rows.map(([factor, detail, pts]) =>
       React.createElement("div", { key: factor, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderTop: "0.5px solid #f1f0e8" } },
         React.createElement("div", null,
-          React.createElement("div", { style: { fontSize: 12, color: "#1a1a18" } }, factor),
+          React.createElement("div", { style: { fontSize: 12 } }, factor),
           React.createElement("div", { style: { fontSize: 11, color: "#888780" } }, detail)
         ),
-        React.createElement("div", { style: { fontSize: 13, fontWeight: 500, color: pts > 0 ? sc(pts * 2) : "#888780", minWidth: 40, textAlign: "right" } }, "+" + pts)
+        React.createElement("span", { style: { fontSize: 13, fontWeight: 500, color: pts > 0 ? sc(pts * 2) : "#888780" } }, "+" + pts)
       )
     ),
-    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 8, marginTop: 4, borderTop: "1px solid #e8e7df" } },
+    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", paddingTop: 8, marginTop: 4, borderTop: "1px solid #e8e7df" } },
       React.createElement("span", { style: { fontSize: 12, fontWeight: 500 } }, "Total"),
       React.createElement("span", { style: { fontSize: 15, fontWeight: 500, color: sc(contractor.leadScore) } }, contractor.leadScore + " / 100")
     )
+  );
+}
+
+function StatusAdvancer({ contractor, onStatusChange }) {
+  const current = contractor.status || "new";
+  const currentCfg = STATUS_CFG[current] || STATUS_CFG.new;
+  return React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+    React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 } },
+      React.createElement("div", { style: { fontSize: 10, color: "#888780", textTransform: "uppercase", letterSpacing: "0.06em" } }, "Pipeline Status"),
+      React.createElement("span", { style: { fontSize: 12, fontWeight: 500, padding: "3px 10px", borderRadius: 4, background: currentCfg.bg, color: currentCfg.color } }, currentCfg.label)
+    ),
+    React.createElement("button", {
+      onClick: () => onStatusChange(contractor.id, STATUS_NEXT[current]),
+      style: { fontSize: 12, fontWeight: 500, padding: "7px 14px", background: STATUS_NEXT_COLOR[current], color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", whiteSpace: "nowrap" }
+    }, STATUS_NEXT_LABEL[current] + " →")
   );
 }
 
@@ -151,29 +183,10 @@ function ContractorCard({ contractor, selected, onClick }) {
   );
 }
 
-function StatusAdvancer({ contractor, onStatusChange }) {
-  const current = contractor.status || "new";
-  const next = STATUS_NEXT[current];
-  const nextLabel = STATUS_NEXT_LABEL[current];
-  const nextColor = STATUS_NEXT_COLOR[current];
-  const currentCfg = STATUS_CFG[current] || STATUS_CFG.new;
-
-  return React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
-    React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 } },
-      React.createElement("div", { style: { fontSize: 10, color: "#888780", textTransform: "uppercase", letterSpacing: "0.06em" } }, "Pipeline Status"),
-      React.createElement("span", { style: { fontSize: 12, fontWeight: 500, padding: "3px 10px", borderRadius: 4, background: currentCfg.bg, color: currentCfg.color } }, currentCfg.label)
-    ),
-    React.createElement("button", {
-      onClick: () => onStatusChange(contractor.id, next),
-      style: { fontSize: 12, fontWeight: 500, padding: "7px 14px", background: nextColor, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", whiteSpace: "nowrap" }
-    }, nextLabel + " →")
-  );
-}
-
 function DetailPanel({ contractor, brief, loading, onGenerate, onStatusChange }) {
   return React.createElement("div", { style: { padding: "20px 24px" } },
 
-    // Header row
+    // Header
     React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 } },
       React.createElement("div", null,
         React.createElement("h2", { style: { fontSize: 18, fontWeight: 500, margin: "0 0 6px" } }, contractor.name),
@@ -188,7 +201,7 @@ function DetailPanel({ contractor, brief, loading, onGenerate, onStatusChange })
     // Score breakdown
     React.createElement(ScoreExplainer, { contractor }),
 
-    // Contact + Profile cards
+    // Contact + Profile
     React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 18 } },
       React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 12, padding: "12px 14px" } },
         React.createElement(Label, null, "Contact"),
@@ -211,13 +224,10 @@ function DetailPanel({ contractor, brief, loading, onGenerate, onStatusChange })
           React.createElement("div", { style: { fontSize: 14, fontWeight: 500 } }, "✦ AI Sales Brief"),
           React.createElement("div", { style: { fontSize: 11, color: "#888780", marginTop: 2 } }, "Perplexity live research → Claude synthesis")
         ),
-        !brief && React.createElement("button", { onClick: () => onGenerate(contractor.id), disabled: loading }, loading ? "Generating…" : "Generate Brief ↗")
+        !brief && !loading && React.createElement("button", { onClick: () => onGenerate(contractor.id) }, "Generate Brief ↗")
       ),
 
-      !brief && !loading && React.createElement("div", { style: { textAlign: "center", padding: "24px 0", color: "#888780", fontSize: 13 } },
-        "Click Generate Brief to run the full Perplexity → Claude pipeline."
-      ),
-
+      // Loading state
       loading && React.createElement("div", { style: { padding: "16px 0" } },
         [["Stage 1", "Perplexity researching reviews, web presence, news, weather…", "#3C3489", "#EEEDFE"],
          ["Stage 2", "Claude synthesizing blended sales brief…", "#185FA5", "#E6F1FB"]].map(([stage, desc, color, bg]) =>
@@ -229,55 +239,64 @@ function DetailPanel({ contractor, brief, loading, onGenerate, onStatusChange })
         React.createElement("div", { style: { width: 50, height: 3, background: "#378ADD", borderRadius: 2, margin: "12px auto 0", animation: "pls 1.2s ease-in-out infinite" } })
       ),
 
+      // Empty state
+      !brief && !loading && React.createElement("div", { style: { textAlign: "center", padding: "24px 0", color: "#888780", fontSize: 13 } },
+        "Click Generate Brief to run the full Perplexity → Claude pipeline."
+      ),
+
+      // Brief content
       brief && !brief.error && React.createElement("div", null,
-        React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" } },
+
+        // Signal badges
+        React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } },
           brief.urgencyLevel && React.createElement("span", { style: { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 4, ...(URGENCY[brief.urgencyLevel] || {}) } }, URGENCY[brief.urgencyLevel]?.label),
           brief.reputationSignal && React.createElement("span", { style: { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 4, ...(REP_SIGNAL[brief.reputationSignal] || {}) } }, "Rep: " + (REP_SIGNAL[brief.reputationSignal]?.label || brief.reputationSignal)),
           brief.researchConfidence && React.createElement("span", { style: { fontSize: 11, color: "#888780", alignSelf: "center" } }, "Confidence: " + brief.researchConfidence)
         ),
-        React.createElement("div", { style: { background: "#f1f0e8", borderRadius: 8, padding: "12px 14px", marginBottom: 14, borderLeft: "3px solid #378ADD" } },
+
+        // ── Section 1: Overview ───────────────────────────────────────────────
+        brief.executiveSummary && React.createElement("div", { style: { background: "#f1f0e8", borderRadius: 8, padding: "12px 14px", marginBottom: 12, borderLeft: "3px solid #378ADD" } },
           React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
-            React.createElement(Label, null, "Executive Summary"),
+            React.createElement(Label, null, "Overview"),
             React.createElement(SourceTag, { source: "claude" })
           ),
           React.createElement("p", { style: { fontSize: 13, lineHeight: 1.7, margin: 0 } }, brief.executiveSummary)
         ),
-        React.createElement("div", { style: { background: "#FAEEDA", border: "0.5px solid #FAC775", borderRadius: 8, padding: "12px 14px", marginBottom: 14 } },
+
+        // ── Section 2: Market signals ─────────────────────────────────────────
+        brief.marketContext && React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 8, padding: "12px 14px", marginBottom: 12 } },
+          React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
+            React.createElement(Label, null, "Market Signals"),
+            React.createElement(SourceTag, { source: "perplexity" })
+          ),
+          React.createElement("p", { style: { fontSize: 13, lineHeight: 1.7, margin: 0 } }, brief.marketContext),
+          brief.onlinePresenceSummary && React.createElement("p", { style: { fontSize: 12, color: "#888780", margin: "8px 0 0", lineHeight: 1.6 } }, brief.onlinePresenceSummary)
+        ),
+
+        // ── Section 3: Opening line ───────────────────────────────────────────
+        brief.openingLine && React.createElement("div", { style: { background: "#FAEEDA", border: "0.5px solid #FAC775", borderRadius: 8, padding: "12px 14px", marginBottom: 12 } },
           React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
             React.createElement(Label, null, "Opening Line"),
             React.createElement(SourceTag, { source: "perplexity" })
           ),
           React.createElement("p", { style: { fontSize: 13, color: "#412402", lineHeight: 1.7, margin: 0, fontStyle: "italic" } }, '"' + brief.openingLine + '"')
         ),
-        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 } },
-          brief.marketContext && React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 8, padding: "10px 12px" } },
-            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 } },
-              React.createElement(Label, null, "Market Signals"),
-              React.createElement(SourceTag, { source: "perplexity" })
-            ),
-            React.createElement("p", { style: { fontSize: 12, margin: 0, lineHeight: 1.6 } }, brief.marketContext)
-          ),
-          brief.bestTimeToCall && React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 8, padding: "10px 12px" } },
-            React.createElement(Label, null, "Best Time to Reach"),
-            React.createElement("p", { style: { fontSize: 12, margin: 0, lineHeight: 1.6 } }, brief.bestTimeToCall)
-          )
+
+        // ── Section 4: Best time to reach ─────────────────────────────────────
+        brief.bestTimeToCall && React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 8, padding: "12px 14px", marginBottom: 16 } },
+          React.createElement(Label, null, "Best Time to Reach"),
+          React.createElement("p", { style: { fontSize: 13, lineHeight: 1.6, margin: 0 } }, brief.bestTimeToCall)
         ),
-        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 } },
-          React.createElement("div", null,
-            React.createElement(Label, null, "Talking Points"),
-            React.createElement("ul", { style: { marginBottom: 14 } }, (brief.talkingPoints || []).map((t, i) => React.createElement("li", { key: i, style: { fontSize: 12 } }, t))),
-            React.createElement(Label, null, "Recommended Products"),
-            React.createElement("ul", null, (brief.recommendedProducts || []).map((p, i) => React.createElement("li", { key: i, style: { fontSize: 12 } }, p)))
-          ),
-          React.createElement("div", null,
-            React.createElement(Label, null, "Pain Points"),
-            React.createElement("ul", { style: { marginBottom: 14 } }, (brief.painPoints || []).map((p, i) => React.createElement("li", { key: i, style: { fontSize: 12 } }, p))),
-            React.createElement(Label, null, "Risk Factors"),
-            React.createElement("ul", null, (brief.riskFactors || []).map((r, i) => React.createElement("li", { key: i, style: { fontSize: 12, color: "#993C1D" } }, r)))
-          )
-        ),
-        brief.onlinePresenceSummary && React.createElement("div", { style: { fontSize: 11, color: "#888780", borderTop: "0.5px solid #e8e7df", paddingTop: 8 } }, brief.onlinePresenceSummary)
+
+        // ── Accordion sections ────────────────────────────────────────────────
+        React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 0 } },
+          brief.talkingPoints?.length      && React.createElement(Accordion, { title: "Talking Points",        items: brief.talkingPoints }),
+          brief.recommendedProducts?.length && React.createElement(Accordion, { title: "Recommended Products",  items: brief.recommendedProducts }),
+          brief.painPoints?.length          && React.createElement(Accordion, { title: "Pain Points to Probe",  items: brief.painPoints }),
+          brief.riskFactors?.length         && React.createElement(Accordion, { title: "Risk Factors",          items: brief.riskFactors, color: "#993C1D" })
+        )
       ),
+
       brief?.error && React.createElement("div", { style: { color: "#993C1D", fontSize: 13, padding: "12px 0" } }, brief.error)
     )
   );
@@ -292,16 +311,6 @@ function App() {
   const [sortBy, setSortBy] = useState("leadScore");
   const [serverStatus, setServerStatus] = useState("checking");
 
-  useEffect(() => {
-    fetch(API + "/api/health").then(r => r.json()).then(() => setServerStatus("ok")).catch(() => setServerStatus("error"));
-    fetch(API + "/api/leads").then(r => r.json()).then(d => { setLeads(d.leads || []); setSelected(d.leads?.[0] || null); }).catch(() => {});
-  }, []);
-
-  const filtered = useMemo(() => leads
-    .filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.city.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => sortBy === "leadScore" ? (b.leadScore||0) - (a.leadScore||0) : sortBy === "rating" ? (b.rating||0) - (a.rating||0) : sortBy === "distance" ? (a.distance||0) - (b.distance||0) : (b.reviewCount||0) - (a.reviewCount||0)),
-  [leads, search, sortBy]);
-
   const generate = useCallback(async (id) => {
     if (briefs[id] || loading[id]) return;
     setLoading(prev => ({ ...prev, [id]: true }));
@@ -315,6 +324,39 @@ function App() {
       setLoading(prev => ({ ...prev, [id]: false }));
     }
   }, [briefs, loading]);
+
+  useEffect(() => {
+    fetch(API + "/api/health").then(r => r.json()).then(() => setServerStatus("ok")).catch(() => setServerStatus("error"));
+    fetch(API + "/api/leads").then(r => r.json()).then(d => {
+      const sorted = (d.leads || []).sort((a, b) => (b.leadScore || 0) - (a.leadScore || 0));
+      setLeads(sorted);
+      if (sorted.length > 0) {
+        setSelected(sorted[0]);
+        // Auto-generate brief for top lead
+        setTimeout(() => {
+          fetch(API + "/api/leads/" + sorted[0].id + "/enrichment")
+            .then(r => r.json())
+            .then(data => setBriefs(prev => ({ ...prev, [sorted[0].id]: data.brief })))
+            .catch(() => {});
+        }, 300);
+        setLoading(prev => ({ ...prev, [sorted[0].id]: true }));
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Clear loading state when brief arrives
+  useEffect(() => {
+    leads.forEach(c => {
+      if (briefs[c.id] && loading[c.id]) {
+        setLoading(prev => ({ ...prev, [c.id]: false }));
+      }
+    });
+  }, [briefs]);
+
+  const filtered = useMemo(() => leads
+    .filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.city.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => sortBy === "leadScore" ? (b.leadScore||0) - (a.leadScore||0) : sortBy === "rating" ? (b.rating||0) - (a.rating||0) : sortBy === "distance" ? (a.distance||0) - (b.distance||0) : (b.reviewCount||0) - (a.reviewCount||0)),
+  [leads, search, sortBy]);
 
   const updateStatus = useCallback(async (id, status) => {
     await fetch(API + "/api/leads/" + id + "/status", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
@@ -348,7 +390,7 @@ function App() {
       )
     ),
 
-    // Main layout
+    // Layout
     React.createElement("div", { style: { display: "grid", gridTemplateColumns: "340px 1fr", minHeight: "calc(100vh - 57px)" } },
       // Left panel
       React.createElement("div", { style: { borderRight: "0.5px solid #e8e7df", background: "#fff" } },
@@ -356,9 +398,7 @@ function App() {
           React.createElement("input", { type: "text", placeholder: "Search by name or city…", value: search, onChange: e => setSearch(e.target.value) }),
           React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
             React.createElement("select", { value: sortBy, onChange: e => setSortBy(e.target.value), style: { flex: 1 } },
-              [["leadScore", "Sort: Lead Score"], ["rating", "Sort: Rating"], ["distance", "Sort: Distance"], ["reviewCount", "Sort: Reviews"]].map(([v, l]) =>
-                React.createElement("option", { key: v, value: v }, l)
-              )
+              [["leadScore","Sort: Lead Score"],["rating","Sort: Rating"],["distance","Sort: Distance"],["reviewCount","Sort: Reviews"]].map(([v,l]) => React.createElement("option", { key: v, value: v }, l))
             ),
             React.createElement("span", { style: { fontSize: 11, color: "#888780", whiteSpace: "nowrap" } }, filtered.length + " shown")
           )
