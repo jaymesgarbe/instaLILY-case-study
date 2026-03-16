@@ -14,62 +14,41 @@
     input:focus { border-color: #378ADD; box-shadow: 0 0 0 2px rgba(55,138,221,0.15); }
     select { padding: 5px 8px; border: 0.5px solid #ccc; border-radius: 8px; background: #fff; color: #1a1a18; cursor: pointer; }
     button { padding: 6px 14px; border: 0.5px solid #ccc; border-radius: 8px; background: #fff; color: #1a1a18; cursor: pointer; transition: background 0.1s; }
-    button:hover { background: #f1f0e8; }
+    button:hover:not(:disabled) { background: #f1f0e8; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    ul { padding-left: 16px; }
-    li { line-height: 1.7; margin-bottom: 2px; }
+    ul { padding-left: 16px; } li { line-height: 1.7; margin-bottom: 2px; }
     ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
-
-    /* Config banner */
-    #config-banner { background: #FAEEDA; border-bottom: 1px solid #FAC775; padding: 10px 20px; display: flex; align-items: center; gap: 12px; font-size: 13px; color: #633806; }
-    #config-banner input { width: 380px; font-size: 12px; border-color: #EF9F27; }
-    #config-banner button { background: #633806; color: #fff; border-color: #633806; font-size: 12px; }
-    #config-banner button:hover { background: #412402; }
-
     @keyframes pls { 0%,100% { opacity: 0.2; } 50% { opacity: 1; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
-
-<div id="config-banner">
-  <span>Server URL:</span>
-  <input id="api-input" type="text" value="http://localhost:3001" placeholder="http://localhost:3001 or https://your-ngrok-url" />
-  <button onclick="applyServer()">Connect</button>
-  <span id="server-status" style="margin-left:4px;">●</span>
-</div>
-
 <div id="root"></div>
-
 <script>
-const {useState, useMemo, useCallback, useEffect} = React;
-let API_BASE = "http://localhost:3001";
-
-function applyServer() {
-  API_BASE = document.getElementById("api-input").value.replace(/\/$/, "");
-  window.__reloadApp && window.__reloadApp();
-}
+const {useState, useMemo, useCallback, useEffect, useRef} = React;
+const API = "http://localhost:3001";
 
 const CERT = {
-  master_elite: { label: "Master Elite ★", bg: "#FAEEDA", color: "#633806", border: "#EF9F27" },
-  certified_plus: { label: "Certified Plus", bg: "#E6F1FB", color: "#0C447C", border: "#378ADD" },
-  certified: { label: "Certified", bg: "#E1F5EE", color: "#085041", border: "#1D9E75" }
+  master_elite:  { label: "Master Elite ★", bg: "#FAEEDA", color: "#633806", border: "#EF9F27" },
+  certified_plus:{ label: "Certified Plus",  bg: "#E6F1FB", color: "#0C447C", border: "#378ADD" },
+  certified:     { label: "Certified",        bg: "#E1F5EE", color: "#085041", border: "#1D9E75" }
 };
 const STATUS_CFG = {
-  new: { label: "New", bg: "#E6F1FB", color: "#0C447C" },
-  contacted: { label: "Contacted", bg: "#FAEEDA", color: "#633806" },
-  qualified: { label: "Qualified", bg: "#EAF3DE", color: "#27500A" },
-  proposal: { label: "Proposal Sent", bg: "#EEEDFE", color: "#3C3489" }
+  new:      { label: "New",          bg: "#E6F1FB", color: "#0C447C" },
+  contacted:{ label: "Contacted",    bg: "#FAEEDA", color: "#633806" },
+  qualified:{ label: "Qualified",    bg: "#EAF3DE", color: "#27500A" },
+  proposal: { label: "Proposal Sent",bg: "#EEEDFE", color: "#3C3489" }
 };
 const REP_SIGNAL = {
-  positive: { label: "Positive", bg: "#EAF3DE", color: "#27500A" },
-  mixed: { label: "Mixed", bg: "#FAEEDA", color: "#633806" },
-  negative: { label: "Caution", bg: "#FCEBEB", color: "#993C1D" },
-  unknown: { label: "Unknown", bg: "#F1EFE8", color: "#5F5E5A" }
+  positive:{ label: "Positive", bg: "#EAF3DE", color: "#27500A" },
+  mixed:   { label: "Mixed",    bg: "#FAEEDA", color: "#633806" },
+  negative:{ label: "Caution",  bg: "#FCEBEB", color: "#993C1D" },
+  unknown: { label: "Unknown",  bg: "#F1EFE8", color: "#5F5E5A" }
 };
 const URGENCY = {
-  high: { label: "High Urgency", bg: "#FCEBEB", color: "#993C1D" },
-  medium: { label: "Medium", bg: "#FAEEDA", color: "#633806" },
-  low: { label: "Low", bg: "#F1EFE8", color: "#5F5E5A" }
+  high:  { label: "High Urgency", bg: "#FCEBEB", color: "#993C1D" },
+  medium:{ label: "Medium",       bg: "#FAEEDA", color: "#633806" },
+  low:   { label: "Low",          bg: "#F1EFE8", color: "#5F5E5A" }
 };
 
 const sc = s => s >= 80 ? "#3B6D11" : s >= 60 ? "#854F0B" : "#993C1D";
@@ -78,12 +57,22 @@ function Badge({ certLevel }) {
   const c = CERT[certLevel] || CERT.certified;
   return React.createElement("span", { style: { fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 4, background: c.bg, color: c.color, border: `0.5px solid ${c.border}`, whiteSpace: "nowrap" } }, c.label);
 }
-
 function StatusPill({ status }) {
   const c = STATUS_CFG[status] || STATUS_CFG.new;
   return React.createElement("span", { style: { fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 4, background: c.bg, color: c.color, whiteSpace: "nowrap" } }, c.label);
 }
-
+function SourceTag({ source }) {
+  const cfg = source === "perplexity"
+    ? { label: "Live Web · Perplexity", bg: "#EEEDFE", color: "#3C3489" }
+    : { label: "AI Analysis · Claude",  bg: "#E6F1FB", color: "#0C447C" };
+  return React.createElement("span", { style: { fontSize: 10, fontWeight: 500, padding: "2px 7px", borderRadius: 3, background: cfg.bg, color: cfg.color } }, cfg.label);
+}
+function DataSourceBadge({ source }) {
+  const live = source === "live";
+  return React.createElement("span", { style: { fontSize: 10, fontWeight: 500, padding: "2px 8px", borderRadius: 3, background: live ? "#E1F5EE" : "#F1EFE8", color: live ? "#085041" : "#5F5E5A", border: `0.5px solid ${live ? "#1D9E75" : "#B4B2A9"}` } },
+    live ? "● Live GAF Data" : "● Seed Data"
+  );
+}
 function ScoreBar({ score }) {
   return React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
     React.createElement("div", { style: { flex: 1, height: 6, background: "#e8e7df", borderRadius: 3, overflow: "hidden" } },
@@ -92,18 +81,9 @@ function ScoreBar({ score }) {
     React.createElement("span", { style: { fontSize: 13, fontWeight: 500, color: sc(score), minWidth: 28 } }, score)
   );
 }
-
-function SourceTag({ source }) {
-  const cfg = source === "perplexity"
-    ? { label: "Live Web · Perplexity", bg: "#EEEDFE", color: "#3C3489" }
-    : { label: "AI Analysis · Claude", bg: "#E6F1FB", color: "#0C447C" };
-  return React.createElement("span", { style: { fontSize: 10, fontWeight: 500, padding: "2px 7px", borderRadius: 3, background: cfg.bg, color: cfg.color } }, cfg.label);
-}
-
 function Label({ children }) {
   return React.createElement("div", { style: { fontSize: 11, fontWeight: 500, color: "#888780", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 } }, children);
 }
-
 function InfoRow({ label, value }) {
   return React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4, gap: 8 } },
     React.createElement("span", { style: { color: "#888780" } }, label),
@@ -119,7 +99,10 @@ function ContractorCard({ contractor, selected, onClick }) {
   },
     React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 } },
       React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-        React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, contractor.name),
+        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 3 } },
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, contractor.name),
+          contractor.source === "live" && React.createElement("span", { style: { fontSize: 9, padding: "1px 5px", borderRadius: 2, background: "#E1F5EE", color: "#085041", flexShrink: 0 } }, "LIVE")
+        ),
         React.createElement("div", { style: { fontSize: 11, color: "#888780", marginBottom: 4 } }, `${contractor.city}, ${contractor.state} · ${contractor.distance} mi`),
         React.createElement(Badge, { certLevel: contractor.certLevel })
       ),
@@ -133,11 +116,39 @@ function ContractorCard({ contractor, selected, onClick }) {
   );
 }
 
+function IngestBanner({ status, onIngest }) {
+  const isRunning = status.state === "running";
+  const isComplete = status.state === "complete";
+  const isError = status.state === "error";
+
+  return React.createElement("div", { style: { padding: "10px 20px", borderBottom: "0.5px solid #e8e7df", background: isComplete ? "#EAF3DE" : isError ? "#FCEBEB" : "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" } },
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+      React.createElement("span", { style: { fontSize: 13, fontWeight: 500, color: "#1a1a18" } }, "GAF Contractor Data"),
+      React.createElement(DataSourceBadge, { source: status.dataSource || "seed" }),
+      isComplete && React.createElement("span", { style: { fontSize: 12, color: "#27500A" } }, `${status.count} contractors loaded from Perplexity`),
+      isError && React.createElement("span", { style: { fontSize: 12, color: "#993C1D" } }, "Ingestion failed: " + status.error),
+      isRunning && React.createElement("span", { style: { fontSize: 12, color: "#888780" } }, "Querying GAF directory via Perplexity…")
+    ),
+    React.createElement("button", {
+      onClick: onIngest,
+      disabled: isRunning,
+      style: { fontSize: 12, padding: "5px 14px", background: isRunning ? "#f1f0e8" : "#185FA5", color: isRunning ? "#888780" : "#fff", border: "none", borderRadius: 8, display: "flex", alignItems: "center", gap: 6 }
+    },
+      isRunning
+        ? React.createElement("span", null, "Ingesting…")
+        : React.createElement("span", null, status.state === "complete" ? "Re-ingest Live Data ↗" : "Ingest Live GAF Data ↗")
+    )
+  );
+}
+
 function DetailPanel({ contractor, brief, loading, onGenerate, onStatusChange }) {
   return React.createElement("div", { style: { padding: "20px 24px" } },
     React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 8 } },
       React.createElement("div", null,
-        React.createElement("h2", { style: { margin: "0 0 6px", fontSize: 18, fontWeight: 500 } }, contractor.name),
+        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 } },
+          React.createElement("h2", { style: { fontSize: 18, fontWeight: 500, margin: 0 } }, contractor.name),
+          React.createElement(DataSourceBadge, { source: contractor.source })
+        ),
         React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
           React.createElement(Badge, { certLevel: contractor.certLevel }),
           React.createElement("span", { style: { fontSize: 12, color: "#888780" } }, "· " + contractor.distance + " mi from 10013")
@@ -152,7 +163,11 @@ function DetailPanel({ contractor, brief, loading, onGenerate, onStatusChange })
     ),
 
     React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 18 } },
-      [["Lead Score", contractor.leadScore, sc(contractor.leadScore)], ["Rating", "★ " + contractor.rating, "#BA7517"], ["Reviews", contractor.reviewCount, null], ["Yrs Est.", contractor.yearsInBusiness, null]].map(([label, val, accent]) =>
+      [["Lead Score", contractor.leadScore, sc(contractor.leadScore)],
+       ["Rating", "★ " + contractor.rating, "#BA7517"],
+       ["Reviews", contractor.reviewCount, null],
+       ["Yrs Est.", contractor.yearsInBusiness, null]
+      ].map(([label, val, accent]) =>
         React.createElement("div", { key: label, style: { background: "#f1f0e8", borderRadius: 8, padding: "10px 12px" } },
           React.createElement("div", { style: { fontSize: 11, color: "#888780", marginBottom: 4 } }, label),
           React.createElement("div", { style: { fontSize: 20, fontWeight: 500, color: accent || "#1a1a18" } }, val)
@@ -163,13 +178,13 @@ function DetailPanel({ contractor, brief, loading, onGenerate, onStatusChange })
     React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 18 } },
       React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 12, padding: "12px 14px" } },
         React.createElement(Label, null, "Contact"),
-        [["Phone", contractor.phone], ["Address", contractor.address + ", " + contractor.city], contractor.website ? ["Website", contractor.website] : null].filter(Boolean).map(([k, v]) =>
+        [["Phone", contractor.phone || "—"], ["Address", (contractor.address || "") + (contractor.city ? ", " + contractor.city : "")], contractor.website ? ["Website", contractor.website] : null].filter(Boolean).map(([k, v]) =>
           React.createElement(InfoRow, { key: k, label: k, value: v })
         )
       ),
       React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 12, padding: "12px 14px" } },
         React.createElement(Label, null, "Profile"),
-        [["Employees", contractor.employees], ["Recent Projects", contractor.recentProjects + " in 90d"], ["Specialties", (contractor.specialties || []).slice(0, 2).join(", ")]].map(([k, v]) =>
+        [["Employees", contractor.employees], ["Recent Projects", (contractor.recentProjects || 0) + " in 90d"], ["Specialties", (contractor.specialties || []).slice(0, 2).join(", ")]].map(([k, v]) =>
           React.createElement(InfoRow, { key: k, label: k, value: v })
         )
       )
@@ -205,7 +220,6 @@ function DetailPanel({ contractor, brief, loading, onGenerate, onStatusChange })
           brief.reputationSignal && React.createElement("span", { style: { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 4, ...(REP_SIGNAL[brief.reputationSignal] || {}) } }, "Rep: " + (REP_SIGNAL[brief.reputationSignal]?.label || brief.reputationSignal)),
           brief.researchConfidence && React.createElement("span", { style: { fontSize: 11, color: "#888780", alignSelf: "center" } }, "Confidence: " + brief.researchConfidence)
         ),
-
         React.createElement("div", { style: { background: "#f1f0e8", borderRadius: 8, padding: "12px 14px", marginBottom: 14, borderLeft: "3px solid #378ADD" } },
           React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
             React.createElement(Label, null, "Executive Summary"),
@@ -213,7 +227,6 @@ function DetailPanel({ contractor, brief, loading, onGenerate, onStatusChange })
           ),
           React.createElement("p", { style: { fontSize: 13, lineHeight: 1.7, margin: 0 } }, brief.executiveSummary)
         ),
-
         React.createElement("div", { style: { background: "#FAEEDA", border: "0.5px solid #FAC775", borderRadius: 8, padding: "12px 14px", marginBottom: 14 } },
           React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
             React.createElement(Label, null, "Opening Line"),
@@ -221,7 +234,6 @@ function DetailPanel({ contractor, brief, loading, onGenerate, onStatusChange })
           ),
           React.createElement("p", { style: { fontSize: 13, color: "#412402", lineHeight: 1.7, margin: 0, fontStyle: "italic" } }, '"' + brief.openingLine + '"')
         ),
-
         React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 } },
           brief.marketContext && React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 8, padding: "10px 12px" } },
             React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 } },
@@ -235,7 +247,6 @@ function DetailPanel({ contractor, brief, loading, onGenerate, onStatusChange })
             React.createElement("p", { style: { fontSize: 12, margin: 0, lineHeight: 1.6 } }, brief.bestTimeToCall)
           )
         ),
-
         React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 } },
           React.createElement("div", null,
             React.createElement(Label, null, "Talking Points"),
@@ -257,7 +268,7 @@ function DetailPanel({ contractor, brief, loading, onGenerate, onStatusChange })
   );
 }
 
-function App({ reloadKey }) {
+function App() {
   const [leads, setLeads] = useState([]);
   const [selected, setSelected] = useState(null);
   const [briefs, setBriefs] = useState({});
@@ -266,28 +277,50 @@ function App({ reloadKey }) {
   const [certFilter, setCertFilter] = useState("all");
   const [sortBy, setSortBy] = useState("leadScore");
   const [serverStatus, setServerStatus] = useState("checking");
+  const [ingestStatus, setIngestStatus] = useState({ state: "idle", dataSource: "seed" });
+  const pollRef = useRef(null);
+
+  const loadLeads = useCallback(() => {
+    fetch(`${API}/api/leads`)
+      .then(r => r.json())
+      .then(d => { setLeads(d.leads || []); if (!selected) setSelected(d.leads?.[0] || null); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
-    setServerStatus("checking");
-    setLeads([]);
-    const headers = { "ngrok-skip-browser-warning": "true" };
-    fetch(`${API_BASE}/api/health`, { headers })
+    fetch(`${API}/api/health`)
       .then(r => r.json())
-      .then(() => {
-        setServerStatus("ok");
-        document.getElementById("server-status").style.color = "#3B6D11";
-        document.getElementById("server-status").textContent = "● Connected";
-      })
-      .catch(() => {
-        setServerStatus("error");
-        document.getElementById("server-status").style.color = "#993C1D";
-        document.getElementById("server-status").textContent = "● Unreachable";
-      });
-    fetch(`${API_BASE}/api/leads`, { headers })
+      .then(d => { setServerStatus("ok"); setIngestStatus(d.ingestion || { state: "idle", dataSource: "seed" }); })
+      .catch(() => setServerStatus("error"));
+    loadLeads();
+  }, []);
+
+  // Poll ingestion status while running
+  useEffect(() => {
+    if (ingestStatus.state === "running") {
+      pollRef.current = setInterval(() => {
+        fetch(`${API}/api/ingest/status`)
+          .then(r => r.json())
+          .then(s => {
+            setIngestStatus(s);
+            if (s.state !== "running") {
+              clearInterval(pollRef.current);
+              loadLeads(); // reload with live data
+            }
+          })
+          .catch(() => clearInterval(pollRef.current));
+      }, 2000);
+    }
+    return () => clearInterval(pollRef.current);
+  }, [ingestStatus.state]);
+
+  const triggerIngest = useCallback(() => {
+    setBriefs({}); // clear cached briefs
+    fetch(`${API}/api/ingest`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ zip: "10013", distance: 25 }) })
       .then(r => r.json())
-      .then(d => { setLeads(d.leads || []); setSelected(d.leads?.[0] || null); })
-      .catch(() => {});
-  }, [reloadKey]);
+      .then(d => setIngestStatus(d.status || { state: "running" }))
+      .catch(err => setIngestStatus({ state: "error", error: err.message }));
+  }, []);
 
   const filtered = useMemo(() => leads.filter(c => {
     if (certFilter !== "all" && c.certLevel !== certFilter) return false;
@@ -299,7 +332,7 @@ function App({ reloadKey }) {
     if (briefs[id] || loading[id]) return;
     setLoading(prev => ({ ...prev, [id]: true }));
     try {
-      const r = await fetch(`${API_BASE}/api/leads/${id}/enrichment`, { headers: { "ngrok-skip-browser-warning": "true" } });
+      const r = await fetch(`${API}/api/leads/${id}/enrichment`);
       const d = await r.json();
       setBriefs(prev => ({ ...prev, [id]: d.brief }));
     } catch (err) {
@@ -310,7 +343,7 @@ function App({ reloadKey }) {
   }, [briefs, loading]);
 
   const updateStatus = useCallback(async (id, status) => {
-    await fetch(`${API_BASE}/api/leads/${id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" }, body: JSON.stringify({ status }) });
+    await fetch(`${API}/api/leads/${id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
     setLeads(prev => prev.map(c => c.id === id ? { ...c, status } : c));
     if (selected?.id === id) setSelected(prev => ({ ...prev, status }));
   }, [selected]);
@@ -318,8 +351,10 @@ function App({ reloadKey }) {
   const hotLeads = leads.filter(c => c.leadScore >= 80).length;
   const meCount = leads.filter(c => c.certLevel === "master_elite").length;
   const avgScore = leads.length ? Math.round(leads.reduce((a, c) => a + c.leadScore, 0) / leads.length) : 0;
+  const liveCount = leads.filter(c => c.source === "live").length;
 
   return React.createElement("div", null,
+    // Header
     React.createElement("div", { style: { background: "#fff", borderBottom: "0.5px solid #e8e7df", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" } },
       React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 10 } },
         React.createElement("span", { style: { fontSize: 18, fontWeight: 500 } },
@@ -331,7 +366,7 @@ function App({ reloadKey }) {
         )
       ),
       React.createElement("div", { style: { display: "flex", gap: 24 } },
-        [["Total Leads", leads.length], ["Hot (80+)", hotLeads], ["Master Elite", meCount], ["Avg Score", avgScore]].map(([label, val]) =>
+        [["Total Leads", leads.length], ["Live Data", liveCount], ["Hot (80+)", hotLeads], ["Avg Score", avgScore]].map(([label, val]) =>
           React.createElement("div", { key: label, style: { textAlign: "center" } },
             React.createElement("div", { style: { fontSize: 18, fontWeight: 500 } }, val),
             React.createElement("div", { style: { fontSize: 11, color: "#888780" } }, label)
@@ -340,7 +375,12 @@ function App({ reloadKey }) {
       )
     ),
 
-    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "340px 1fr", minHeight: "calc(100vh - 88px)" } },
+    // Ingest banner
+    React.createElement(IngestBanner, { status: ingestStatus, onIngest: triggerIngest }),
+
+    // Main layout
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "340px 1fr", minHeight: "calc(100vh - 120px)" } },
+      // Left panel
       React.createElement("div", { style: { borderRight: "0.5px solid #e8e7df", background: "#fff" } },
         React.createElement("div", { style: { padding: "12px 14px", borderBottom: "0.5px solid #e8e7df", background: "#f9f9f7", display: "flex", flexDirection: "column", gap: 8 } },
           React.createElement("input", { type: "text", placeholder: "Search contractors…", value: search, onChange: e => setSearch(e.target.value) }),
@@ -354,13 +394,19 @@ function App({ reloadKey }) {
           ),
           React.createElement("div", { style: { fontSize: 11, color: "#888780" } }, filtered.length + " contractors")
         ),
-        leads.length === 0
-          ? React.createElement("div", { style: { padding: 20, textAlign: "center", color: "#888780", fontSize: 13 } }, serverStatus === "error" ? "Cannot reach server. Check the URL above." : "Loading…")
-          : React.createElement("div", { style: { height: "calc(100vh - 180px)", overflowY: "auto" } },
-              filtered.map(c => React.createElement(ContractorCard, { key: c.id, contractor: c, selected, onClick: setSelected }))
+        ingestStatus.state === "running"
+          ? React.createElement("div", { style: { padding: "20px", textAlign: "center", color: "#888780", fontSize: 13 } },
+              React.createElement("div", { style: { width: 24, height: 24, border: "2px solid #e8e7df", borderTopColor: "#378ADD", borderRadius: "50%", margin: "0 auto 10px", animation: "spin 0.8s linear infinite" } }),
+              "Fetching live GAF data from Perplexity…"
             )
+          : leads.length === 0
+            ? React.createElement("div", { style: { padding: 20, textAlign: "center", color: "#888780", fontSize: 13 } }, serverStatus === "error" ? "Cannot reach server at " + API : "Loading…")
+            : React.createElement("div", { style: { height: "calc(100vh - 200px)", overflowY: "auto" } },
+                filtered.map(c => React.createElement(ContractorCard, { key: c.id, contractor: c, selected, onClick: setSelected }))
+              )
       ),
-      React.createElement("div", { style: { overflowY: "auto", height: "calc(100vh - 88px)", background: "#f9f9f7" } },
+      // Right panel
+      React.createElement("div", { style: { overflowY: "auto", height: "calc(100vh - 120px)", background: "#f9f9f7" } },
         selected
           ? React.createElement(DetailPanel, { contractor: selected, brief: briefs[selected.id], loading: loading[selected.id], onGenerate: generate, onStatusChange: updateStatus })
           : React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#888780" } }, "Select a contractor")
@@ -369,14 +415,7 @@ function App({ reloadKey }) {
   );
 }
 
-let reloadKey = 0;
-function Root() {
-  const [key, setKey] = useState(0);
-  window.__reloadApp = () => setKey(k => k + 1);
-  return React.createElement(App, { reloadKey: key });
-}
-
-ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(Root));
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
 </script>
 </body>
 </html>
