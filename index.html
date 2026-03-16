@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoofIQ — Sales Intelligence</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f9f9f7; color: #1a1a18; }
+    input, select, button { font-family: inherit; font-size: 13px; outline: none; }
+    input { width: 100%; padding: 7px 10px; border: 0.5px solid #ccc; border-radius: 8px; background: #fff; color: #1a1a18; }
+    input:focus { border-color: #378ADD; box-shadow: 0 0 0 2px rgba(55,138,221,0.15); }
+    select { padding: 5px 8px; border: 0.5px solid #ccc; border-radius: 8px; background: #fff; color: #1a1a18; cursor: pointer; }
+    button { padding: 6px 14px; border: 0.5px solid #ccc; border-radius: 8px; background: #fff; color: #1a1a18; cursor: pointer; transition: background 0.1s; }
+    button:hover { background: #f1f0e8; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    ul { padding-left: 16px; }
+    li { line-height: 1.7; margin-bottom: 2px; }
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+
+    /* Config banner */
+    #config-banner { background: #FAEEDA; border-bottom: 1px solid #FAC775; padding: 10px 20px; display: flex; align-items: center; gap: 12px; font-size: 13px; color: #633806; }
+    #config-banner input { width: 380px; font-size: 12px; border-color: #EF9F27; }
+    #config-banner button { background: #633806; color: #fff; border-color: #633806; font-size: 12px; }
+    #config-banner button:hover { background: #412402; }
+
+    @keyframes pls { 0%,100% { opacity: 0.2; } 50% { opacity: 1; } }
+  </style>
+</head>
+<body>
+
+<div id="config-banner">
+  <span>Server URL:</span>
+  <input id="api-input" type="text" value="http://localhost:3001" placeholder="http://localhost:3001 or https://your-ngrok-url" />
+  <button onclick="applyServer()">Connect</button>
+  <span id="server-status" style="margin-left:4px;">●</span>
+</div>
+
+<div id="root"></div>
+
+<script>
+const {useState, useMemo, useCallback, useEffect} = React;
+let API_BASE = "http://localhost:3001";
+
+function applyServer() {
+  API_BASE = document.getElementById("api-input").value.replace(/\/$/, "");
+  window.__reloadApp && window.__reloadApp();
+}
+
+const CERT = {
+  master_elite: { label: "Master Elite ★", bg: "#FAEEDA", color: "#633806", border: "#EF9F27" },
+  certified_plus: { label: "Certified Plus", bg: "#E6F1FB", color: "#0C447C", border: "#378ADD" },
+  certified: { label: "Certified", bg: "#E1F5EE", color: "#085041", border: "#1D9E75" }
+};
+const STATUS_CFG = {
+  new: { label: "New", bg: "#E6F1FB", color: "#0C447C" },
+  contacted: { label: "Contacted", bg: "#FAEEDA", color: "#633806" },
+  qualified: { label: "Qualified", bg: "#EAF3DE", color: "#27500A" },
+  proposal: { label: "Proposal Sent", bg: "#EEEDFE", color: "#3C3489" }
+};
+const REP_SIGNAL = {
+  positive: { label: "Positive", bg: "#EAF3DE", color: "#27500A" },
+  mixed: { label: "Mixed", bg: "#FAEEDA", color: "#633806" },
+  negative: { label: "Caution", bg: "#FCEBEB", color: "#993C1D" },
+  unknown: { label: "Unknown", bg: "#F1EFE8", color: "#5F5E5A" }
+};
+const URGENCY = {
+  high: { label: "High Urgency", bg: "#FCEBEB", color: "#993C1D" },
+  medium: { label: "Medium", bg: "#FAEEDA", color: "#633806" },
+  low: { label: "Low", bg: "#F1EFE8", color: "#5F5E5A" }
+};
+
+const sc = s => s >= 80 ? "#3B6D11" : s >= 60 ? "#854F0B" : "#993C1D";
+
+function Badge({ certLevel }) {
+  const c = CERT[certLevel] || CERT.certified;
+  return React.createElement("span", { style: { fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 4, background: c.bg, color: c.color, border: `0.5px solid ${c.border}`, whiteSpace: "nowrap" } }, c.label);
+}
+
+function StatusPill({ status }) {
+  const c = STATUS_CFG[status] || STATUS_CFG.new;
+  return React.createElement("span", { style: { fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 4, background: c.bg, color: c.color, whiteSpace: "nowrap" } }, c.label);
+}
+
+function ScoreBar({ score }) {
+  return React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+    React.createElement("div", { style: { flex: 1, height: 6, background: "#e8e7df", borderRadius: 3, overflow: "hidden" } },
+      React.createElement("div", { style: { width: `${score}%`, height: "100%", background: sc(score), borderRadius: 3 } })
+    ),
+    React.createElement("span", { style: { fontSize: 13, fontWeight: 500, color: sc(score), minWidth: 28 } }, score)
+  );
+}
+
+function SourceTag({ source }) {
+  const cfg = source === "perplexity"
+    ? { label: "Live Web · Perplexity", bg: "#EEEDFE", color: "#3C3489" }
+    : { label: "AI Analysis · Claude", bg: "#E6F1FB", color: "#0C447C" };
+  return React.createElement("span", { style: { fontSize: 10, fontWeight: 500, padding: "2px 7px", borderRadius: 3, background: cfg.bg, color: cfg.color } }, cfg.label);
+}
+
+function Label({ children }) {
+  return React.createElement("div", { style: { fontSize: 11, fontWeight: 500, color: "#888780", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 } }, children);
+}
+
+function InfoRow({ label, value }) {
+  return React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4, gap: 8 } },
+    React.createElement("span", { style: { color: "#888780" } }, label),
+    React.createElement("span", { style: { color: "#1a1a18", textAlign: "right" } }, value)
+  );
+}
+
+function ContractorCard({ contractor, selected, onClick }) {
+  const isSel = selected?.id === contractor.id;
+  return React.createElement("div", {
+    onClick: () => onClick(contractor),
+    style: { padding: "12px 14px", cursor: "pointer", borderBottom: "0.5px solid #e8e7df", background: isSel ? "#f1f0e8" : "#fff", borderLeft: isSel ? "3px solid #378ADD" : "3px solid transparent" }
+  },
+    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 } },
+      React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, contractor.name),
+        React.createElement("div", { style: { fontSize: 11, color: "#888780", marginBottom: 4 } }, `${contractor.city}, ${contractor.state} · ${contractor.distance} mi`),
+        React.createElement(Badge, { certLevel: contractor.certLevel })
+      ),
+      React.createElement("div", { style: { marginLeft: 8, flexShrink: 0 } }, React.createElement(StatusPill, { status: contractor.status }))
+    ),
+    React.createElement(ScoreBar, { score: contractor.leadScore }),
+    React.createElement("div", { style: { display: "flex", gap: 12, marginTop: 6 } },
+      React.createElement("span", { style: { fontSize: 11, color: "#888780" } }, "★ " + contractor.rating + " (" + contractor.reviewCount + ")"),
+      React.createElement("span", { style: { fontSize: 11, color: "#888780" } }, contractor.yearsInBusiness + "yr · " + contractor.employees)
+    )
+  );
+}
+
+function DetailPanel({ contractor, brief, loading, onGenerate, onStatusChange }) {
+  return React.createElement("div", { style: { padding: "20px 24px" } },
+    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 8 } },
+      React.createElement("div", null,
+        React.createElement("h2", { style: { margin: "0 0 6px", fontSize: 18, fontWeight: 500 } }, contractor.name),
+        React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
+          React.createElement(Badge, { certLevel: contractor.certLevel }),
+          React.createElement("span", { style: { fontSize: 12, color: "#888780" } }, "· " + contractor.distance + " mi from 10013")
+        )
+      ),
+      React.createElement("select", {
+        value: contractor.status,
+        onChange: e => onStatusChange(contractor.id, e.target.value)
+      }, ["new", "contacted", "qualified", "proposal"].map(s =>
+        React.createElement("option", { key: s, value: s }, STATUS_CFG[s].label)
+      ))
+    ),
+
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 18 } },
+      [["Lead Score", contractor.leadScore, sc(contractor.leadScore)], ["Rating", "★ " + contractor.rating, "#BA7517"], ["Reviews", contractor.reviewCount, null], ["Yrs Est.", contractor.yearsInBusiness, null]].map(([label, val, accent]) =>
+        React.createElement("div", { key: label, style: { background: "#f1f0e8", borderRadius: 8, padding: "10px 12px" } },
+          React.createElement("div", { style: { fontSize: 11, color: "#888780", marginBottom: 4 } }, label),
+          React.createElement("div", { style: { fontSize: 20, fontWeight: 500, color: accent || "#1a1a18" } }, val)
+        )
+      )
+    ),
+
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 18 } },
+      React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 12, padding: "12px 14px" } },
+        React.createElement(Label, null, "Contact"),
+        [["Phone", contractor.phone], ["Address", contractor.address + ", " + contractor.city], contractor.website ? ["Website", contractor.website] : null].filter(Boolean).map(([k, v]) =>
+          React.createElement(InfoRow, { key: k, label: k, value: v })
+        )
+      ),
+      React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 12, padding: "12px 14px" } },
+        React.createElement(Label, null, "Profile"),
+        [["Employees", contractor.employees], ["Recent Projects", contractor.recentProjects + " in 90d"], ["Specialties", (contractor.specialties || []).slice(0, 2).join(", ")]].map(([k, v]) =>
+          React.createElement(InfoRow, { key: k, label: k, value: v })
+        )
+      )
+    ),
+
+    React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 12, padding: "16px 18px" } },
+      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } },
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 14, fontWeight: 500 } }, "✦ AI Sales Brief"),
+          React.createElement("div", { style: { fontSize: 11, color: "#888780", marginTop: 2 } }, "Perplexity live research → Claude synthesis")
+        ),
+        !brief && React.createElement("button", { onClick: () => onGenerate(contractor.id), disabled: loading }, loading ? "Generating…" : "Generate Brief ↗")
+      ),
+
+      !brief && !loading && React.createElement("div", { style: { textAlign: "center", padding: "24px 0", color: "#888780", fontSize: 13 } },
+        "Click Generate Brief to run the full Perplexity → Claude pipeline."
+      ),
+
+      loading && React.createElement("div", { style: { padding: "16px 0" } },
+        [["Stage 1", "Perplexity researching reviews, web presence, news, weather…", "#3C3489", "#EEEDFE"],
+         ["Stage 2", "Claude synthesizing blended sales brief…", "#185FA5", "#E6F1FB"]].map(([stage, desc, color, bg]) =>
+          React.createElement("div", { key: stage, style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: bg, borderRadius: 8, marginBottom: 8 } },
+            React.createElement("span", { style: { fontSize: 11, fontWeight: 500, padding: "1px 6px", background: color, color: "#fff", borderRadius: 3 } }, stage),
+            React.createElement("span", { style: { fontSize: 12, color: "#888780" } }, desc)
+          )
+        ),
+        React.createElement("div", { style: { width: 50, height: 3, background: "#378ADD", borderRadius: 2, margin: "12px auto 0", animation: "pls 1.2s ease-in-out infinite" } })
+      ),
+
+      brief && !brief.error && React.createElement("div", null,
+        React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" } },
+          brief.urgencyLevel && React.createElement("span", { style: { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 4, ...(URGENCY[brief.urgencyLevel] || {}) } }, URGENCY[brief.urgencyLevel]?.label),
+          brief.reputationSignal && React.createElement("span", { style: { fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 4, ...(REP_SIGNAL[brief.reputationSignal] || {}) } }, "Rep: " + (REP_SIGNAL[brief.reputationSignal]?.label || brief.reputationSignal)),
+          brief.researchConfidence && React.createElement("span", { style: { fontSize: 11, color: "#888780", alignSelf: "center" } }, "Confidence: " + brief.researchConfidence)
+        ),
+
+        React.createElement("div", { style: { background: "#f1f0e8", borderRadius: 8, padding: "12px 14px", marginBottom: 14, borderLeft: "3px solid #378ADD" } },
+          React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
+            React.createElement(Label, null, "Executive Summary"),
+            React.createElement(SourceTag, { source: "claude" })
+          ),
+          React.createElement("p", { style: { fontSize: 13, lineHeight: 1.7, margin: 0 } }, brief.executiveSummary)
+        ),
+
+        React.createElement("div", { style: { background: "#FAEEDA", border: "0.5px solid #FAC775", borderRadius: 8, padding: "12px 14px", marginBottom: 14 } },
+          React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
+            React.createElement(Label, null, "Opening Line"),
+            React.createElement(SourceTag, { source: "perplexity" })
+          ),
+          React.createElement("p", { style: { fontSize: 13, color: "#412402", lineHeight: 1.7, margin: 0, fontStyle: "italic" } }, '"' + brief.openingLine + '"')
+        ),
+
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 } },
+          brief.marketContext && React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 8, padding: "10px 12px" } },
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 } },
+              React.createElement(Label, null, "Market Signals"),
+              React.createElement(SourceTag, { source: "perplexity" })
+            ),
+            React.createElement("p", { style: { fontSize: 12, margin: 0, lineHeight: 1.6 } }, brief.marketContext)
+          ),
+          brief.bestTimeToCall && React.createElement("div", { style: { background: "#fff", border: "0.5px solid #e8e7df", borderRadius: 8, padding: "10px 12px" } },
+            React.createElement(Label, null, "Best Time to Reach"),
+            React.createElement("p", { style: { fontSize: 12, margin: 0, lineHeight: 1.6 } }, brief.bestTimeToCall)
+          )
+        ),
+
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 } },
+          React.createElement("div", null,
+            React.createElement(Label, null, "Talking Points"),
+            React.createElement("ul", { style: { marginBottom: 14 } }, (brief.talkingPoints || []).map((t, i) => React.createElement("li", { key: i, style: { fontSize: 12 } }, t))),
+            React.createElement(Label, null, "Recommended Products"),
+            React.createElement("ul", null, (brief.recommendedProducts || []).map((p, i) => React.createElement("li", { key: i, style: { fontSize: 12 } }, p)))
+          ),
+          React.createElement("div", null,
+            React.createElement(Label, null, "Pain Points"),
+            React.createElement("ul", { style: { marginBottom: 14 } }, (brief.painPoints || []).map((p, i) => React.createElement("li", { key: i, style: { fontSize: 12 } }, p))),
+            React.createElement(Label, null, "Risk Factors"),
+            React.createElement("ul", null, (brief.riskFactors || []).map((r, i) => React.createElement("li", { key: i, style: { fontSize: 12, color: "#993C1D" } }, r)))
+          )
+        ),
+        brief.onlinePresenceSummary && React.createElement("div", { style: { fontSize: 11, color: "#888780", borderTop: "0.5px solid #e8e7df", paddingTop: 8 } }, brief.onlinePresenceSummary)
+      ),
+      brief?.error && React.createElement("div", { style: { color: "#993C1D", fontSize: 13, padding: "12px 0" } }, brief.error)
+    )
+  );
+}
+
+function App({ reloadKey }) {
+  const [leads, setLeads] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [briefs, setBriefs] = useState({});
+  const [loading, setLoading] = useState({});
+  const [search, setSearch] = useState("");
+  const [certFilter, setCertFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("leadScore");
+  const [serverStatus, setServerStatus] = useState("checking");
+
+  useEffect(() => {
+    setServerStatus("checking");
+    setLeads([]);
+    const headers = { "ngrok-skip-browser-warning": "true" };
+    fetch(`${API_BASE}/api/health`, { headers })
+      .then(r => r.json())
+      .then(() => {
+        setServerStatus("ok");
+        document.getElementById("server-status").style.color = "#3B6D11";
+        document.getElementById("server-status").textContent = "● Connected";
+      })
+      .catch(() => {
+        setServerStatus("error");
+        document.getElementById("server-status").style.color = "#993C1D";
+        document.getElementById("server-status").textContent = "● Unreachable";
+      });
+    fetch(`${API_BASE}/api/leads`, { headers })
+      .then(r => r.json())
+      .then(d => { setLeads(d.leads || []); setSelected(d.leads?.[0] || null); })
+      .catch(() => {});
+  }, [reloadKey]);
+
+  const filtered = useMemo(() => leads.filter(c => {
+    if (certFilter !== "all" && c.certLevel !== certFilter) return false;
+    if (search) { const q = search.toLowerCase(); return c.name.toLowerCase().includes(q) || c.city.toLowerCase().includes(q); }
+    return true;
+  }).sort((a, b) => sortBy === "leadScore" ? b.leadScore - a.leadScore : sortBy === "rating" ? b.rating - a.rating : sortBy === "distance" ? a.distance - b.distance : b.reviewCount - a.reviewCount), [leads, search, certFilter, sortBy]);
+
+  const generate = useCallback(async (id) => {
+    if (briefs[id] || loading[id]) return;
+    setLoading(prev => ({ ...prev, [id]: true }));
+    try {
+      const r = await fetch(`${API_BASE}/api/leads/${id}/enrichment`, { headers: { "ngrok-skip-browser-warning": "true" } });
+      const d = await r.json();
+      setBriefs(prev => ({ ...prev, [id]: d.brief }));
+    } catch (err) {
+      setBriefs(prev => ({ ...prev, [id]: { error: "Server error: " + err.message } }));
+    } finally {
+      setLoading(prev => ({ ...prev, [id]: false }));
+    }
+  }, [briefs, loading]);
+
+  const updateStatus = useCallback(async (id, status) => {
+    await fetch(`${API_BASE}/api/leads/${id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" }, body: JSON.stringify({ status }) });
+    setLeads(prev => prev.map(c => c.id === id ? { ...c, status } : c));
+    if (selected?.id === id) setSelected(prev => ({ ...prev, status }));
+  }, [selected]);
+
+  const hotLeads = leads.filter(c => c.leadScore >= 80).length;
+  const meCount = leads.filter(c => c.certLevel === "master_elite").length;
+  const avgScore = leads.length ? Math.round(leads.reduce((a, c) => a + c.leadScore, 0) / leads.length) : 0;
+
+  return React.createElement("div", null,
+    React.createElement("div", { style: { background: "#fff", borderBottom: "0.5px solid #e8e7df", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" } },
+      React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 10 } },
+        React.createElement("span", { style: { fontSize: 18, fontWeight: 500 } },
+          React.createElement("span", { style: { color: "#185FA5" } }, "Roof"),
+          React.createElement("span", { style: { color: "#BA7517" } }, "IQ")
+        ),
+        React.createElement("span", { style: { fontSize: 11, padding: "2px 8px", borderRadius: 3, background: serverStatus === "ok" ? "#EAF3DE" : "#FCEBEB", color: serverStatus === "ok" ? "#27500A" : "#993C1D", border: "0.5px solid " + (serverStatus === "ok" ? "#1D9E75" : "#E24B4A") } },
+          serverStatus === "ok" ? "● Live" : serverStatus === "error" ? "● Offline" : "● Connecting…"
+        )
+      ),
+      React.createElement("div", { style: { display: "flex", gap: 24 } },
+        [["Total Leads", leads.length], ["Hot (80+)", hotLeads], ["Master Elite", meCount], ["Avg Score", avgScore]].map(([label, val]) =>
+          React.createElement("div", { key: label, style: { textAlign: "center" } },
+            React.createElement("div", { style: { fontSize: 18, fontWeight: 500 } }, val),
+            React.createElement("div", { style: { fontSize: 11, color: "#888780" } }, label)
+          )
+        )
+      )
+    ),
+
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "340px 1fr", minHeight: "calc(100vh - 88px)" } },
+      React.createElement("div", { style: { borderRight: "0.5px solid #e8e7df", background: "#fff" } },
+        React.createElement("div", { style: { padding: "12px 14px", borderBottom: "0.5px solid #e8e7df", background: "#f9f9f7", display: "flex", flexDirection: "column", gap: 8 } },
+          React.createElement("input", { type: "text", placeholder: "Search contractors…", value: search, onChange: e => setSearch(e.target.value) }),
+          React.createElement("div", { style: { display: "flex", gap: 8 } },
+            React.createElement("select", { value: certFilter, onChange: e => setCertFilter(e.target.value), style: { flex: 1 } },
+              [["all", "All Certifications"], ["master_elite", "Master Elite"], ["certified_plus", "Certified Plus"], ["certified", "Certified"]].map(([v, l]) => React.createElement("option", { key: v, value: v }, l))
+            ),
+            React.createElement("select", { value: sortBy, onChange: e => setSortBy(e.target.value), style: { flex: 1 } },
+              [["leadScore", "Score"], ["rating", "Rating"], ["distance", "Distance"], ["reviewCount", "Reviews"]].map(([v, l]) => React.createElement("option", { key: v, value: v }, "Sort: " + l))
+            )
+          ),
+          React.createElement("div", { style: { fontSize: 11, color: "#888780" } }, filtered.length + " contractors")
+        ),
+        leads.length === 0
+          ? React.createElement("div", { style: { padding: 20, textAlign: "center", color: "#888780", fontSize: 13 } }, serverStatus === "error" ? "Cannot reach server. Check the URL above." : "Loading…")
+          : React.createElement("div", { style: { height: "calc(100vh - 180px)", overflowY: "auto" } },
+              filtered.map(c => React.createElement(ContractorCard, { key: c.id, contractor: c, selected, onClick: setSelected }))
+            )
+      ),
+      React.createElement("div", { style: { overflowY: "auto", height: "calc(100vh - 88px)", background: "#f9f9f7" } },
+        selected
+          ? React.createElement(DetailPanel, { contractor: selected, brief: briefs[selected.id], loading: loading[selected.id], onGenerate: generate, onStatusChange: updateStatus })
+          : React.createElement("div", { style: { padding: 40, textAlign: "center", color: "#888780" } }, "Select a contractor")
+      )
+    )
+  );
+}
+
+let reloadKey = 0;
+function Root() {
+  const [key, setKey] = useState(0);
+  window.__reloadApp = () => setKey(k => k + 1);
+  return React.createElement(App, { reloadKey: key });
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(Root));
+</script>
+</body>
+</html>
