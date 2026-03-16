@@ -428,6 +428,59 @@ app.post('/api/ingest/playwright', async (req, res) => {
   })();
 });
 
+
+// Debug route — dumps GAF page HTML + screenshot for selector inspection
+app.get('/api/ingest/debug', async (req, res) => {
+  let playwright;
+  try { playwright = require('playwright'); }
+  catch { return res.status(500).json({ error: 'Playwright not installed' }); }
+
+  let browser;
+  try {
+    browser = await playwright.chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36' });
+    await page.goto('https://www.gaf.com/en-us/roofing-contractors/residential?zip=10013&distance=25', { waitUntil: 'networkidle', timeout: 30000 });
+    await page.waitForTimeout(4000);
+
+    const info = await page.evaluate(() => {
+      // Get all unique class names on the page that might be contractor cards
+      const allEls = document.querySelectorAll('*');
+      const classNames = new Set();
+      allEls.forEach(el => {
+        if (el.className && typeof el.className === 'string') {
+          el.className.split(' ').forEach(c => { if (c.length > 3) classNames.add(c); });
+        }
+      });
+
+      // Find classes that mention contractor, result, card, listing
+      const relevant = [...classNames].filter(c =>
+        /contractor|result|card|listing|roofer|company|vendor|provider/i.test(c)
+      ).slice(0, 40);
+
+      // Count items matching each relevant class
+      const counts = {};
+      relevant.forEach(c => {
+        try { counts[c] = document.querySelectorAll('.' + CSS.escape(c)).length; } catch(e) {}
+      });
+
+      // Get page title and any h2/h3 text
+      const headings = [...document.querySelectorAll('h1,h2,h3')].map(h => h.innerText?.trim()).filter(Boolean).slice(0, 10);
+
+      // Get all button texts
+      const buttons = [...document.querySelectorAll('button,a')].map(b => b.innerText?.trim()).filter(t => t && t.length < 50).slice(0, 20);
+
+      return { relevant, counts, headings, buttons, title: document.title, url: window.location.href, bodyLength: document.body.innerHTML.length };
+    });
+
+    await browser.close();
+    res.json(info);
+  } catch(err) {
+    if (browser) await browser.close();
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Poll ingestion status
 app.get("/api/ingest/status", (_req, res) => {
   res.json({ ...ingestionStatus, contractors: contractorStore.length, dataSource: contractorStore[0]?.source || "seed" });
