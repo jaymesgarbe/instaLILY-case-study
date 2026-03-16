@@ -328,6 +328,14 @@ function App() {
     return true;
   }).sort((a, b) => sortBy === "leadScore" ? b.leadScore - a.leadScore : sortBy === "rating" ? b.rating - a.rating : sortBy === "distance" ? a.distance - b.distance : b.reviewCount - a.reviewCount), [leads, search, certFilter, sortBy]);
 
+  const triggerPlaywright = useCallback(() => {
+    setBriefs({});
+    fetch(API + '/api/ingest/playwright', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zip: '10013', distance: 25 }) })
+      .then(r => r.json())
+      .then(d => setIngestStatus({ ...(d.status || { state: 'running' }), method: 'playwright' }))
+      .catch(err => setIngestStatus({ state: 'error', error: err.message }));
+  }, []);
+
   const generate = useCallback(async (id) => {
     if (briefs[id] || loading[id]) return;
     setLoading(prev => ({ ...prev, [id]: true }));
@@ -376,7 +384,7 @@ function App() {
     ),
 
     // Ingest banner
-    React.createElement(IngestBanner, { status: ingestStatus, onIngest: triggerIngest }),
+    React.createElement(IngestBanner, { status: ingestStatus, onIngest: triggerIngest, onPlaywright: triggerPlaywright }),
 
     // Main layout
     React.createElement("div", { style: { display: "grid", gridTemplateColumns: "340px 1fr", minHeight: "calc(100vh - 120px)" } },

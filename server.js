@@ -285,6 +285,103 @@ app.post("/api/ingest", async (req, res) => {
     });
 });
 
+
+// ─── Playwright scraper route ─────────────────────────────────────────────────
+
+app.post('/api/ingest/playwright', async (req, res) => {
+  if (ingestionStatus.state === 'running') {
+    return res.status(409).json({ error: 'Ingestion already in progress' });
+  }
+  let playwright;
+  try { playwright = require('playwright'); }
+  catch { return res.status(500).json({ error: 'Playwright not installed. Run: npm install playwright && npx playwright install chromium' }); }
+
+  const { zip = '10013', distance = 25 } = req.body;
+  ingestionStatus = { state: 'running', startedAt: new Date().toISOString(), completedAt: null, count: 0, error: null, method: 'playwright' };
+  res.json({ message: 'Playwright scrape started', status: ingestionStatus });
+
+  (async () => {
+    let browser;
+    try {
+      console.log('[Playwright] Launching Chromium...');
+      browser = await playwright.chromium.launch({ headless: true });
+      const page = await browser.newPage();
+      await page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36' });
+
+      const url = `https://www.gaf.com/en-us/roofing-contractors/residential?zip=${zip}&distance=${distance}`;
+      console.log(`[Playwright] Navigating to ${url}`);
+      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+      await page.waitForTimeout(4000);
+
+      const raw = await page.evaluate(() => {
+        const results = [];
+        const cardSelectors = ['[class*="contractor-card"]','[class*="ContractorCard"]','[class*="contractor-result"]','[class*="search-result"]','[class*="ResultCard"]','.contractor-listing','[class*="listing-card"]'];
+        let cards = [];
+        for (const sel of cardSelectors) { cards = document.querySelectorAll(sel); if (cards.length > 0) break; }
+        if (cards.length === 0) {
+          const links = document.querySelectorAll('a[href*="/roofing-contractors/"]');
+          cards = [...new Set([...links].map(l => l.closest('[class]') || l))];
+        }
+        cards.forEach((card) => {
+          const text = card.innerText || '';
+          const html = card.innerHTML || '';
+          const nameEl = card.querySelector('h2,h3,h4,[class*="name"],[class*="Name"],[class*="title"]');
+          const name = nameEl?.innerText?.trim() || '';
+          const cardText = text.toLowerCase();
+          let certLevel = 'certified';
+          if (cardText.includes('master elite') || html.toLowerCase().includes('master-elite') || html.toLowerCase().includes('president')) certLevel = 'master_elite';
+          else if (cardText.includes('certified plus') || html.toLowerCase().includes('certified-plus')) certLevel = 'certified_plus';
+          const addrEl = card.querySelector('[class*="address"],[class*="Address"],[class*="location"],address');
+          const address = addrEl?.innerText?.trim() || '';
+          const phoneEl = card.querySelector('a[href^="tel:"]');
+          const phone = phoneEl?.getAttribute('href')?.replace('tel:','') || null;
+          const ratingEl = card.querySelector('[class*="rating"],[class*="Rating"],[aria-label*="rating"]');
+          const ratingText = ratingEl?.innerText || ratingEl?.getAttribute('aria-label') || '';
+          const ratingMatch = ratingText.match(/[d.]+/);
+          const rating = ratingMatch ? parseFloat(ratingMatch[0]) : 4.0;
+          const reviewMatch = text.match(/(d+)s*review/i);
+          const reviewCount = reviewMatch ? parseInt(reviewMatch[1]) : 0;
+          const websiteEl = card.querySelector('a[href^="http"]:not([href*="gaf.com"])');
+          const website = websiteEl?.getAttribute('href') || null;
+          const distMatch = text.match(/([d.]+)s*mi/i);
+          const dist = distMatch ? parseFloat(distMatch[1]) : null;
+          if (name) results.push({ name, certLevel, address, phone, rating, reviewCount, website, distance: dist });
+        });
+        return { results, totalCards: cards.length };
+      });
+
+      console.log(`[Playwright] Found ${raw.results.length} contractors from ${raw.totalCards} cards`);
+      if (raw.results.length === 0) throw new Error('No contractor cards found — GAF may have changed their DOM structure');
+
+      const contractors = raw.results.map((c, i) => {
+        const addrParts = (c.address || '').split(',').map(s => s.trim());
+        const stateZip = (addrParts[2] || '').trim().split(' ');
+        const normalized = {
+          id: `gaf-${String(i+1).padStart(3,'0')}`,
+          name: c.name, certLevel: c.certLevel,
+          address: addrParts[0] || '', city: addrParts[1] || '', state: stateZip[0] || '', zip: stateZip[1] || '',
+          phone: c.phone || null, website: c.website || null,
+          distance: c.distance || Math.round((i+1)*1.5*10)/10,
+          yearsInBusiness: 10, reviewCount: c.reviewCount || 0, rating: c.rating || 4.0,
+          specialties: ['Residential'], employees: 'Unknown', recentProjects: 0,
+          status: 'new', source: 'playwright', ingestedAt: new Date().toISOString(),
+        };
+        normalized.leadScore = calculateLeadScore(normalized);
+        return normalized;
+      });
+
+      contractorStore = contractors;
+      contractorMap = new Map(contractors.map(c => [c.id, c]));
+      enrichmentCache.clear();
+      ingestionStatus = { state: 'complete', startedAt: ingestionStatus.startedAt, completedAt: new Date().toISOString(), count: contractors.length, error: null, method: 'playwright' };
+      console.log(`[Playwright] Complete — ${contractors.length} real GAF contractors loaded`);
+    } catch (err) {
+      ingestionStatus = { state: 'error', startedAt: ingestionStatus.startedAt, completedAt: new Date().toISOString(), count: 0, error: err.message, method: 'playwright' };
+      console.error(`[Playwright] Failed: ${err.message}`);
+    } finally { if (browser) await browser.close(); }
+  })();
+});
+
 // Poll ingestion status
 app.get("/api/ingest/status", (_req, res) => {
   res.json({ ...ingestionStatus, contractors: contractorStore.length, dataSource: contractorStore[0]?.source || "seed" });
