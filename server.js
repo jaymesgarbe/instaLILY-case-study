@@ -139,6 +139,9 @@ Synthesize both sources. Respond ONLY with valid JSON, no markdown fences.
   return JSON.parse(data.content[0].text.replace(/```json|```/g, "").trim());
 }
 
+// ─── Static frontend ──────────────────────────────────────────────────────────
+app.use(express.static(__dirname));
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 app.get("/api/health", (_req, res) => {
@@ -219,7 +222,8 @@ app.patch("/api/leads/:id/status", (req, res) => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`\n  RoofIQ API  →  http://localhost:${PORT}`);
+  console.log(`\n  RoofIQ      →  http://localhost:${PORT}`);
+  console.log(`  API         →  http://localhost:${PORT}/api/health`);
   console.log(`  Anthropic   →  ${process.env.ANTHROPIC_API_KEY ? "✓ key set" : "✗ MISSING — add to .env"}`);
   console.log(`  Perplexity  →  ${process.env.PERPLEXITY_API_KEY ? "✓ key set" : "✗ MISSING — add to .env"}\n`);
 });
