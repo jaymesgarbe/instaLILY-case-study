@@ -311,7 +311,25 @@ app.post('/api/ingest/playwright', async (req, res) => {
       const url = `https://www.gaf.com/en-us/roofing-contractors/residential?zip=${zip}&distance=${distance}`;
       console.log(`[Playwright] Navigating to ${url}`);
       await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
-      await page.waitForTimeout(4000);
+      await page.waitForTimeout(3000);
+
+      // Scroll to load all lazy-loaded contractor cards
+      console.log('[Playwright] Scrolling to load all contractors...');
+      let prevHeight = 0;
+      let scrollAttempts = 0;
+      while (scrollAttempts < 20) {
+        const currHeight = await page.evaluate(() => {
+          window.scrollTo(0, document.body.scrollHeight);
+          return document.body.scrollHeight;
+        });
+        await page.waitForTimeout(1500);
+        if (currHeight === prevHeight) break;
+        prevHeight = currHeight;
+        scrollAttempts++;
+        console.log(`[Playwright] Scroll ${scrollAttempts} — page height: ${currHeight}px`);
+      }
+      console.log(`[Playwright] Scrolling complete after ${scrollAttempts} passes`);
+      await page.waitForTimeout(1000);
 
       const raw = await page.evaluate(() => {
         const results = [];
